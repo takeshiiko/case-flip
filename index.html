@@ -1,0 +1,1862 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Case Flip Mint</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;500;600;700&family=Orbitron:wght@500;600;700;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --volt: #e8ff00;
+      --volt-dim: #a8bb00;
+      --volt-glow: rgba(232, 255, 0, 0.42);
+      --ink: #030500;
+      --panel: rgba(4, 7, 0, 0.66);
+      --panel-solid: rgba(4, 7, 0, 0.86);
+      --line: rgba(232, 255, 0, 0.26);
+      --line-strong: rgba(232, 255, 0, 0.58);
+      --text: #f7ffe0;
+      --muted: rgba(247, 255, 224, 0.62);
+      --danger: #ff5a4d;
+
+      --display: "Orbitron", ui-sans-serif, system-ui, sans-serif;
+      --body: "Exo 2", Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+
+      --space-1: 6px;
+      --space-2: 10px;
+      --space-3: 16px;
+      --space-4: 24px;
+      --space-5: 40px;
+
+      --dur: 180ms;
+      --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: var(--ink);
+      color: var(--text);
+      font-family: var(--body);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button, select { font: inherit; color: inherit; }
+
+    /* ---------- Stage ---------- */
+
+    .page {
+      position: relative;
+      min-height: 100svh;
+      isolation: isolate;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .bg-video {
+      position: fixed;
+      inset: 0;
+      z-index: -3;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
+      filter: saturate(1.06) contrast(1.03);
+    }
+
+    .stage-grade {
+      position: fixed;
+      inset: 0;
+      z-index: -2;
+      pointer-events: none;
+      background:
+        radial-gradient(ellipse 60% 48% at 50% 42%, transparent 0%, rgba(0, 0, 0, 0.42) 100%),
+        linear-gradient(180deg, rgba(0, 0, 0, 0.72) 0%, transparent 22%, transparent 46%, rgba(0, 0, 0, 0.86) 100%);
+    }
+
+    .scanlines {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      opacity: 0.35;
+      background: repeating-linear-gradient(
+        180deg,
+        rgba(0, 0, 0, 0) 0px,
+        rgba(0, 0, 0, 0) 2px,
+        rgba(0, 0, 0, 0.22) 3px,
+        rgba(0, 0, 0, 0) 4px
+      );
+    }
+
+    /* ---------- Top bar ---------- */
+
+    .topbar {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-3);
+      padding: clamp(14px, 2.4vw, 26px) clamp(14px, 2.6vw, 30px);
+      padding-top: max(clamp(14px, 2.4vw, 26px), env(safe-area-inset-top));
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .brand-mark {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      flex: none;
+      border: 1px solid var(--line-strong);
+      background: rgba(4, 7, 0, 0.6);
+      box-shadow: 0 0 22px rgba(232, 255, 0, 0.18);
+    }
+
+    .brand-mark svg { display: block; }
+
+    .brand-text { min-width: 0; }
+
+    .brand-title {
+      font-family: var(--display);
+      font-weight: 900;
+      font-size: 15px;
+      letter-spacing: 0.16em;
+      line-height: 1;
+      white-space: nowrap;
+      text-transform: uppercase;
+      text-shadow: 0 0 18px var(--volt-glow);
+    }
+
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
+
+    .net-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      height: 44px;
+      padding: 0 14px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      backdrop-filter: blur(14px);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    /* The × only appears once a wallet is attached, so the same button reads as
+       "connect" when empty and as "tap to disconnect" when full. Kept visible
+       rather than hover-only, because touch has no hover. */
+    .wallet-x {
+      display: none;
+      margin-left: 2px;
+      font-size: 15px;
+      line-height: 1;
+      opacity: 0.55;
+    }
+
+    .btn--wallet.is-connected .wallet-x { display: inline; }
+    .btn--wallet.is-connected:hover .wallet-x { opacity: 1; color: var(--danger); }
+    .btn--wallet.is-connected:hover { border-color: var(--danger); background: rgba(255, 90, 77, 0.1); }
+    .btn--wallet.is-connected:hover::before { border-color: var(--danger); }
+
+    /* Compact icon-only control (sound toggle) */
+    .btn--icon {
+      width: 48px;
+      padding: 0;
+      flex: none;
+    }
+
+    .btn--icon svg { display: block; }
+    .btn--icon .icon-off { display: none; }
+    .btn--icon[aria-pressed="false"] .icon-on { display: none; }
+    .btn--icon[aria-pressed="false"] .icon-off { display: block; }
+    .btn--icon[aria-pressed="false"] { color: var(--muted); border-color: var(--line); }
+    .btn--icon[aria-pressed="true"] { color: var(--volt); border-color: var(--line-strong); }
+
+    /* Equaliser bars animate only while audio is actually playing */
+    .eq-bar { transform-origin: 50% 100%; }
+    .btn--icon[aria-pressed="true"] .eq-bar { animation: eq 900ms var(--ease) infinite alternate; }
+    .btn--icon[aria-pressed="true"] .eq-bar:nth-child(2) { animation-delay: 150ms; }
+    .btn--icon[aria-pressed="true"] .eq-bar:nth-child(3) { animation-delay: 300ms; }
+
+    @keyframes eq {
+      from { transform: scaleY(0.4); }
+      to { transform: scaleY(1); }
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      flex: none;
+      border-radius: 50%;
+      background: var(--volt);
+      box-shadow: 0 0 10px var(--volt);
+    }
+
+    .dot.is-idle { background: var(--muted); box-shadow: none; }
+    .dot.is-bad { background: var(--danger); box-shadow: 0 0 10px var(--danger); }
+    .dot.is-live { animation: pulse 1.8s var(--ease) infinite; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 10px var(--volt); }
+      50% { opacity: 0.45; box-shadow: 0 0 2px var(--volt); }
+    }
+
+    /* ---------- Buttons ---------- */
+
+    .btn {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      min-height: 48px;
+      padding: 0 18px;
+      border: 1px solid var(--line-strong);
+      border-radius: 0;
+      background: rgba(4, 7, 0, 0.58);
+      backdrop-filter: blur(14px);
+      font-family: var(--display);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition:
+        transform var(--dur) var(--ease),
+        background-color var(--dur) var(--ease),
+        border-color var(--dur) var(--ease),
+        box-shadow var(--dur) var(--ease),
+        color var(--dur) var(--ease);
+    }
+
+    /* HUD corner tick */
+    .btn::before {
+      content: "";
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 8px;
+      height: 8px;
+      border-top: 1px solid currentColor;
+      border-left: 1px solid currentColor;
+      opacity: 0.5;
+      pointer-events: none;
+    }
+
+    .btn:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 2px var(--ink), 0 0 0 4px var(--volt);
+    }
+
+    .btn:not(:disabled):hover {
+      border-color: var(--volt);
+      background: rgba(232, 255, 0, 0.12);
+      box-shadow: 0 0 26px rgba(232, 255, 0, 0.22);
+    }
+
+    .btn:not(:disabled):active { transform: translateY(1px); }
+
+    .btn:disabled {
+      cursor: not-allowed;
+      opacity: 0.42;
+      filter: saturate(0.35);
+      transform: none;
+      box-shadow: none;
+    }
+
+    .btn--primary {
+      width: 100%;
+      min-height: 54px;
+      border-color: var(--volt);
+      background: var(--volt);
+      color: #050700;
+      font-weight: 900;
+      font-size: 13px;
+      letter-spacing: 0.2em;
+      box-shadow: 0 0 34px var(--volt-glow);
+    }
+
+    .btn--primary:not(:disabled):hover {
+      background: #f2ff4d;
+      transform: translateY(-2px);
+      box-shadow: 0 0 52px rgba(232, 255, 0, 0.55);
+    }
+
+    .btn--primary:not(:disabled):active { transform: translateY(0); }
+
+    .btn--primary:disabled {
+      background: rgba(232, 255, 0, 0.16);
+      border-color: var(--line);
+      color: var(--text);
+      opacity: 0.62;
+      filter: none;
+    }
+
+    /* Busy spinner */
+    .btn.is-busy { color: transparent; }
+    .btn.is-busy::after {
+      content: "";
+      position: absolute;
+      width: 17px;
+      height: 17px;
+      border: 2px solid currentColor;
+      border-color: rgba(5, 7, 0, 0.28);
+      border-top-color: #050700;
+      border-radius: 50%;
+      animation: spin 720ms linear infinite;
+    }
+    .btn--ghost.is-busy::after {
+      border-color: rgba(247, 255, 224, 0.25);
+      border-top-color: var(--volt);
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ---------- Console panels ---------- */
+
+    .console {
+      position: relative;
+      z-index: 2;
+      margin-top: auto;
+      display: grid;
+      grid-template-columns: minmax(0, 322px) 1fr minmax(0, 322px);
+      align-items: end;
+      gap: var(--space-3);
+      padding: clamp(14px, 2.6vw, 30px);
+      padding-bottom: max(clamp(16px, 3vw, 40px), env(safe-area-inset-bottom));
+    }
+
+    .panel {
+      position: relative;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      backdrop-filter: blur(20px);
+      padding: var(--space-3);
+      box-shadow:
+        0 30px 90px rgba(0, 0, 0, 0.5),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.03),
+        0 0 48px rgba(232, 255, 0, 0.08);
+      animation: rise 520ms var(--ease) both;
+    }
+
+    .panel:nth-of-type(2) { animation-delay: 90ms; }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(18px); }
+      to { opacity: 1; transform: none; }
+    }
+
+    /* HUD corner brackets */
+    .panel::before,
+    .panel::after {
+      content: "";
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      border: 1px solid var(--volt);
+      opacity: 0.7;
+      pointer-events: none;
+    }
+    .panel::before { top: -1px; left: -1px; border-width: 1px 0 0 1px; }
+    .panel::after { bottom: -1px; right: -1px; border-width: 0 1px 1px 0; }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+      margin-bottom: var(--space-2);
+      padding-bottom: 9px;
+      border-bottom: 1px solid rgba(232, 255, 0, 0.16);
+    }
+
+    .panel-title {
+      font-family: var(--display);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
+      color: var(--volt);
+    }
+
+    .panel-note {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .stack { display: grid; gap: var(--space-2); }
+
+    /* ---------- Stats ---------- */
+
+    .stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      background: rgba(232, 255, 0, 0.18);
+      border: 1px solid rgba(232, 255, 0, 0.18);
+    }
+
+    .stat {
+      min-height: 52px;
+      padding: 8px 10px;
+      background: rgba(3, 5, 0, 0.62);
+    }
+
+    .stat > span {
+      display: block;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .stat strong {
+      display: block;
+      margin-top: 5px;
+      font-family: var(--display);
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 1;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+
+    .meter {
+      height: 4px;
+      background: rgba(232, 255, 0, 0.14);
+      border: 1px solid rgba(232, 255, 0, 0.18);
+      overflow: hidden;
+    }
+
+    .meter-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--volt);
+      box-shadow: 0 0 14px var(--volt-glow);
+      transition: width 420ms var(--ease);
+    }
+
+    .stats--solo { grid-template-columns: 1fr; }
+
+    /* Prize ladder — amounts only, no odds. Reads like the board on the show. */
+    .tiers {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 4px;
+      margin-top: 8px;
+    }
+
+    .tier {
+      text-align: center;
+      padding: 3px 4px;
+      border: 1px solid rgba(232, 255, 0, 0.26);
+      background: rgba(232, 255, 0, 0.06);
+      font-family: var(--display);
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 1.4;
+      letter-spacing: 0.04em;
+      color: var(--text);
+      white-space: nowrap;
+    }
+
+    .tier--top {
+      border-color: var(--volt);
+      background: rgba(232, 255, 0, 0.16);
+      color: var(--volt);
+      text-shadow: 0 0 12px var(--volt-glow);
+    }
+
+    /* One-line explanation of how the prize mechanic works */
+    .mechanic {
+      margin: 0;
+      font-size: 11px;
+      line-height: 1.55;
+      letter-spacing: 0.01em;
+      color: var(--muted);
+    }
+
+    .mechanic b {
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    /* ---------- Quantity stepper ---------- */
+
+    .controls {
+      display: grid;
+      grid-template-columns: 50px 1fr 50px;
+      min-height: 50px;
+      border: 1px solid rgba(232, 255, 0, 0.24);
+      background: rgba(3, 5, 0, 0.5);
+    }
+
+    .step {
+      border: 0;
+      background: rgba(255, 255, 255, 0.06);
+      display: grid;
+      place-items: center;
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1;
+      cursor: pointer;
+      transition: background-color var(--dur) var(--ease), color var(--dur) var(--ease);
+    }
+
+    .step:not(:disabled):hover { background: rgba(232, 255, 0, 0.18); color: var(--volt); }
+    .step:not(:disabled):active { background: rgba(232, 255, 0, 0.3); }
+    .step:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--volt); }
+    .step:disabled { cursor: not-allowed; opacity: 0.35; }
+
+    .qty {
+      display: grid;
+      place-items: center;
+      border-inline: 1px solid rgba(232, 255, 0, 0.24);
+      font-family: var(--display);
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+    }
+
+    /* ---------- Select ---------- */
+
+    .field { display: grid; gap: 6px; }
+
+    .field-label {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .select-wrap { position: relative; }
+
+    .select-wrap::after {
+      content: "";
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      width: 7px;
+      height: 7px;
+      border-right: 2px solid var(--volt);
+      border-bottom: 2px solid var(--volt);
+      transform: translateY(-70%) rotate(45deg);
+      pointer-events: none;
+    }
+
+    .token-select {
+      width: 100%;
+      min-height: 48px;
+      padding: 0 36px 0 12px;
+      border: 1px solid rgba(232, 255, 0, 0.4);
+      border-radius: 0;
+      background: rgba(3, 5, 0, 0.72);
+      font-family: var(--display);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      appearance: none;
+      cursor: pointer;
+      transition: border-color var(--dur) var(--ease), background-color var(--dur) var(--ease);
+    }
+
+    .token-select:hover { border-color: var(--volt); }
+    .token-select:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ink), 0 0 0 4px var(--volt); }
+    .token-select option { background: #0a0d02; color: var(--text); }
+
+    /* ---------- Reveal readout (text area above the reveal button) ---------- */
+
+    .readout {
+      position: relative;
+      min-height: 82px;
+      padding: 10px 12px;
+      border: 1px solid rgba(232, 255, 0, 0.28);
+      background:
+        linear-gradient(180deg, rgba(232, 255, 0, 0.06), rgba(232, 255, 0, 0)),
+        rgba(3, 5, 0, 0.72);
+      display: grid;
+      align-content: start;
+      gap: 7px;
+    }
+
+    .readout-top {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .readout-msg {
+      font-family: var(--display);
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.5;
+      letter-spacing: 0.05em;
+      color: var(--text);
+      text-transform: uppercase;
+    }
+
+    .readout-msg .hl {
+      color: var(--volt);
+      text-shadow: 0 0 16px var(--volt-glow);
+      /* Keep an amount and its ticker on one line — wrap before them instead. */
+      white-space: nowrap;
+    }
+
+    .readout.is-live { border-color: var(--line-strong); box-shadow: 0 0 30px rgba(232, 255, 0, 0.14); }
+    .readout.is-open .readout-msg { font-size: 14px; font-weight: 900; }
+
+    /* Caret blink after the message */
+    .readout-msg::after {
+      content: "_";
+      color: var(--volt);
+      animation: blink 1.1s steps(1) infinite;
+    }
+
+    @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
+
+    /* ---------- Foot line ---------- */
+
+    .foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+      margin-top: var(--space-2);
+      padding-top: 9px;
+      border-top: 1px solid rgba(232, 255, 0, 0.14);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .foot strong { color: var(--volt); font-weight: 700; }
+
+    /* ---------- Toast ---------- */
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      top: 84px;
+      z-index: 20;
+      width: min(440px, calc(100% - 28px));
+      padding: 13px 15px;
+      border: 1px solid var(--line-strong);
+      background: var(--panel-solid);
+      backdrop-filter: blur(18px);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6), 0 0 34px rgba(232, 255, 0, 0.12);
+      transform: translate(-50%, -14px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+      font-size: 12.5px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-align: center;
+      overflow-wrap: anywhere;
+    }
+
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    .toast.is-error { border-color: rgba(255, 90, 77, 0.6); }
+
+    .sr-only {
+      position: absolute;
+      width: 1px; height: 1px;
+      padding: 0; margin: -1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    /* ---------- Responsive ---------- */
+
+    @media (min-width: 981px) {
+      html, body { height: 100%; overflow: hidden; }
+      .page { height: 100svh; }
+    }
+
+    /* Tablet: drop the centre gutter but keep both panels on one row so the
+       case is never buried under a stack. */
+    @media (max-width: 980px) {
+      .console {
+        grid-template-columns: 1fr 1fr;
+        gap: var(--space-2);
+      }
+      .console-spacer { display: none; }
+      .panel { animation-delay: 0ms; }
+      .readout { min-height: 68px; }
+    }
+
+    /* Keep the case visible on phones: compact the console, not the video. */
+    @media (max-width: 640px) {
+      .console { grid-template-columns: 1fr; }
+      .net-badge { display: none; }
+      .topbar { padding-bottom: 5px; gap: 8px; }
+
+      /* A connected address plus the brand does not fit at 390px otherwise. */
+      .brand-title { font-size: 14px; letter-spacing: 0.1em; }
+      .btn { font-size: 11px; letter-spacing: 0.08em; padding: 0 11px; }
+      .btn--icon { width: 44px; }
+
+      /* Full-bleed `cover` in portrait crops the 3:2 source to a narrow centre
+         strip and the case vanishes. Give it a hero band above the console instead. */
+      .bg-video {
+        height: 23svh;
+        bottom: auto;
+        object-position: 50% 52%;
+        transform: none;
+      }
+
+      .stage-grade {
+        background:
+          radial-gradient(ellipse 96% 22% at 50% 20%, transparent 0%, rgba(0, 0, 0, 0.34) 100%),
+          linear-gradient(180deg, rgba(0, 0, 0, 0.72) 0%, transparent 14%, transparent 26%, rgba(0, 0, 0, 0.9) 40%);
+      }
+
+      /* Wallet state and prize token already read from the top bar / readout. */
+      .foot { display: none; }
+
+      .console {
+        gap: 8px;
+        padding-inline: 12px;
+        padding-bottom: max(8px, env(safe-area-inset-bottom));
+      }
+      .panel { padding: 11px; }
+      .panel-head { margin-bottom: 7px; padding-bottom: 6px; }
+      .stack { gap: 6px; }
+
+      .stat { min-height: 40px; padding: 5px 9px; }
+      .stat strong { font-size: 14px; }
+
+      .tiers { margin-top: 6px; gap: 3px; }
+      .tier { font-size: 9px; padding: 2px 3px; }
+
+      /* Reclaim the label rows — the stepper and the select both read as their
+         own label. Kept in the a11y tree rather than removed. */
+      .field-label {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+      }
+
+      .field { gap: 0; }
+      .mechanic { font-size: 10.5px; line-height: 1.5; }
+
+      .controls { grid-template-columns: 48px 1fr 48px; min-height: 48px; }
+      .btn--primary { min-height: 48px; }
+
+      .readout { min-height: 0; padding: 9px 11px; gap: 5px; }
+      .readout-msg { font-size: 11px; line-height: 1.45; }
+      .readout.is-open .readout-msg { font-size: 13px; }
+
+      .foot { margin-top: 8px; padding-top: 7px; }
+      .toast { top: 72px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <video class="bg-video" autoplay muted loop playsinline preload="auto" poster="assets/poster.jpg" aria-hidden="true" tabindex="-1">
+      <source src="assets/highdeal.mp4" type="video/mp4">
+    </video>
+    <div class="stage-grade" aria-hidden="true"></div>
+    <div class="scanlines" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#e8ff00" stroke-width="1.8" stroke-linecap="square">
+            <rect x="2.5" y="7.5" width="19" height="12" />
+            <path d="M9 7.5V5.5h6v2" />
+            <path d="M2.5 13.5h19" />
+          </svg>
+        </span>
+        <div class="brand-text">
+          <div class="brand-title">Case Flip</div>
+        </div>
+      </div>
+
+      <div class="topbar-right">
+        <span class="net-badge">
+          <span class="dot is-idle" id="netDot"></span>
+          <span id="netLabel">Robinhood Testnet</span>
+        </span>
+        <button class="btn btn--ghost btn--icon" id="soundBtn" type="button" aria-pressed="false" aria-label="Turn sound on" title="Sound">
+          <svg class="icon-on" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <path d="M4 9.5h3.5L12 5.5v13L7.5 14.5H4z" stroke-linejoin="round" />
+            <line class="eq-bar" x1="15.5" y1="14.5" x2="15.5" y2="9.5" />
+            <line class="eq-bar" x1="18.5" y1="16" x2="18.5" y2="8" />
+            <line class="eq-bar" x1="21.5" y1="14.5" x2="21.5" y2="9.5" />
+          </svg>
+          <svg class="icon-off" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <path d="M4 9.5h3.5L12 5.5v13L7.5 14.5H4z" stroke-linejoin="round" />
+            <line x1="16" y1="9.5" x2="21" y2="14.5" />
+            <line x1="21" y1="9.5" x2="16" y2="14.5" />
+          </svg>
+        </button>
+        <button class="btn btn--ghost btn--wallet" id="connectBtn" type="button">
+          <span id="connectLabel">Connect</span>
+          <span class="wallet-x" aria-hidden="true">&#215;</span>
+        </button>
+      </div>
+    </header>
+
+    <section class="console">
+      <!-- ============ MINT ============ -->
+      <section class="panel" aria-labelledby="mintTitle">
+        <div class="panel-head">
+          <h2 class="panel-title" id="mintTitle">Mint</h2>
+          <span class="panel-note" id="walletCapNote">Max 10 / Wallet</span>
+        </div>
+
+        <div class="stack">
+          <div class="stats">
+            <div class="stat">
+              <span>Supply</span>
+              <strong><span id="mintedCount">0</span>/<span id="maxSupplyLabel">20K</span></strong>
+            </div>
+            <div class="stat">
+              <span>Total Price</span>
+              <strong id="totalPrice">0.000531 ETH</strong>
+            </div>
+          </div>
+
+          <div class="meter" role="progressbar" aria-labelledby="mintTitle" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="supplyMeter">
+            <div class="meter-fill" id="supplyFill"></div>
+          </div>
+
+          <div class="field">
+            <span class="field-label" id="qtyLabel">Quantity</span>
+            <div class="controls">
+              <button class="step" id="minusBtn" type="button" aria-label="Decrease quantity">−</button>
+              <div class="qty" id="qty" role="status" aria-live="polite" aria-labelledby="qtyLabel">1</div>
+              <button class="step" id="plusBtn" type="button" aria-label="Increase quantity">+</button>
+            </div>
+          </div>
+
+          <button class="btn btn--primary" id="mintBtn" type="button">Mint</button>
+        </div>
+
+        <div class="foot">
+          <span id="walletState">Not Connected</span>
+          <strong id="walletRemaining">10 Left</strong>
+        </div>
+      </section>
+
+      <div class="console-spacer" aria-hidden="true"></div>
+
+      <!-- ============ REVEAL ============ -->
+      <section class="panel" aria-labelledby="revealTitle">
+        <div class="panel-head">
+          <h2 class="panel-title" id="revealTitle">Reveal</h2>
+          <span class="panel-note" id="revealPhase">Locked</span>
+        </div>
+
+        <div class="stack">
+          <div class="stats stats--solo" aria-label="Prize pool">
+            <div class="stat">
+              <span>Prize Pool</span>
+              <strong id="prizePool">10,000 USDG</strong>
+              <div class="tiers" id="prizeTiers" aria-label="Prize amounts"></div>
+            </div>
+          </div>
+
+          <p class="mechanic">
+            Sealed until sellout. Opening a case pays its prize
+            <b>to your wallet</b>.
+          </p>
+
+          <div class="field">
+            <label class="field-label" for="tokenSelect">Your Case</label>
+            <div class="select-wrap">
+              <!-- Populated from the wallet's actual holdings by syncTokenSelect() -->
+              <select class="token-select" id="tokenSelect"></select>
+            </div>
+          </div>
+
+          <!-- Text readout directly above the reveal button -->
+          <div class="readout" id="readout">
+            <div class="readout-top">
+              <span class="dot is-idle" id="readoutDot"></span>
+              <span id="readoutLabel">Status</span>
+            </div>
+            <p class="readout-msg" id="readoutMsg">Connect a wallet to inspect your case.</p>
+          </div>
+
+          <button class="btn btn--primary" id="revealBtn" type="button">Reveal Locked</button>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <audio id="bgAudio" src="assets/banker.mp3" loop preload="auto"></audio>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    const USE_TESTNET = false;
+
+    const ROBINHOOD_MAINNET = {
+      chainId: "0x1237",
+      chainName: "Robinhood Chain",
+      nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+      rpcUrls: ["https://rpc.mainnet.chain.robinhood.com"],
+      blockExplorerUrls: ["https://robinhoodchain.blockscout.com"]
+    };
+
+    const ROBINHOOD_TESTNET = {
+      chainId: "0xb626",
+      chainName: "Robinhood Chain Testnet",
+      nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+      rpcUrls: ["https://rpc.testnet.chain.robinhood.com"],
+      blockExplorerUrls: ["https://explorer.testnet.chain.robinhood.com"]
+    };
+
+    const ROBINHOOD_CHAIN = USE_TESTNET ? ROBINHOOD_TESTNET : ROBINHOOD_MAINNET;
+    const CONTRACT_ADDRESS = "0xD47a0693e063765A2690CB87054242f6241Cf005";
+    const MAINNET_MINT_PRICE_WEI = 550000000000000n;
+    const TESTNET_MINT_PRICE_WEI = 53152755704620n;
+    // Fallbacks only. The contract is the source of truth for these three — they
+    // are read on boot so the UI can never drift from the deployed config
+    // (e.g. testnet enforces 3 per wallet while mainnet allows 10).
+    const config = {
+      maxSupply: USE_TESTNET ? 3 : 20000,
+      maxPerWallet: 10,
+      mintPriceWei: USE_TESTNET ? TESTNET_MINT_PRICE_WEI : MAINNET_MINT_PRICE_WEI,
+      rewardPool: USE_TESTNET ? 1000000n : 10000000000n,
+      rewardSymbol: USE_TESTNET ? "mUSDG" : "USDG",
+      loaded: false
+    };
+
+    // Prize amounts only — deliberately no odds or winner counts. Not derivable
+    // from chain state, so keep this in step with the reward CSV.
+    const PRIZE_TIERS = USE_TESTNET ? [1] : [1000, 500, 250, 100, 50, 20, 5, 2, 1];
+
+    const MINT_SELECTOR = "0xa0712d68";
+    const MAX_SUPPLY_SELECTOR = "0xd5abeb01";
+    const MAX_PER_WALLET_SELECTOR = "0x453c2310";
+    const MINT_PRICE_SELECTOR = "0x6817c76c";
+    const TOTAL_REWARD_POOL_SELECTOR = "0x09c85e24";
+    const REWARD_TOKEN_SELECTOR = "0xf7c618c1";
+    const ERC20_SYMBOL_SELECTOR = "0x95d89b41";
+    const TOTAL_MINTED_SELECTOR = "0xa2309ff8";
+    const MINTED_BY_WALLET_SELECTOR = "0x0d758111";
+    const SALE_ACTIVE_SELECTOR = "0x68428a1b";
+    const REVEAL_ACTIVE_SELECTOR = "0x39c5c1a7";
+    const REVEALED_SELECTOR = "0x61a2bc01";
+    const REVEALED_REWARD_SELECTOR = "0x6c84705d";
+    const REVEAL_SELECTOR = "0xa926abd6";
+    const OWNER_OF_SELECTOR = "0x6352211e";
+    const TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+    const PRIZE_DECIMALS = 6;
+
+    // Block the collection was deployed in. Scanning Transfer logs from 0 works
+    // but gets slower as the chain grows — set this at deploy time.
+    const DEPLOY_BLOCK = 36430093;
+
+    /**
+     * Where per-token reveal proofs are served from, as `<base>/<tokenId>.json`
+     * containing { rewardAmount, salt, proof }.
+     *
+     * MUST stay null until startReveal() is mined. Publishing proofs earlier
+     * lets anyone read the prize map that the Merkle root exists to hide.
+     * The frontend also refuses to fetch while revealActive is false.
+     */
+    const REVEAL_PROOF_BASE = null;
+
+    // Testnet only: three tokens, proofs inline. Never used when
+    // REVEAL_PROOF_BASE is set.
+    const TEST_REVEAL_DATA = {
+      1: {
+        rewardAmount: "0",
+        salt: "0xda823125080f76827822c7f1d34f3d6675fae61603f8757c04a824e5b2e07b07",
+        proof: [
+          "0x2e0e0230271aa0e379467714adb845ad809a200f3f217629f7fe19c4575815fe",
+          "0x139e42ca348dc9b474c8c2ebd5a281f057be713a7d614d292c4474e56f25e07f"
+        ]
+      },
+      2: {
+        rewardAmount: "1000000",
+        salt: "0x7fcba54cff25e020925b554550d8c445c7e8150cf49c2c8784b382920ee69a3f",
+        proof: [
+          "0x4a6de6b459ae437bf886155c91adc241a2db5be38aeef6e3b8a262efc84b395d",
+          "0x139e42ca348dc9b474c8c2ebd5a281f057be713a7d614d292c4474e56f25e07f"
+        ]
+      },
+      3: {
+        rewardAmount: "0",
+        salt: "0xce7eb2c798047f01b42adf6eb605c67be3200ff427921b5cee75977dd6f932bd",
+        proof: [
+          "0xb9865b5413f96bf64db6b2faa61f4f19362e86201475dcc75e785603af7d7721"
+        ]
+      }
+    };
+
+    const state = {
+      qty: 1,
+      minted: 0,
+      walletMinted: 0,
+      account: null,
+      chainOk: false,
+      saleActive: false,
+      revealActive: false,
+      selectedTokenId: 1,
+      selectedTokenRevealed: false,
+      ownedTokens: [],
+      tokensLoading: false,
+      revealPrize: null,
+      pending: null // null | "mint" | "reveal"
+    };
+
+    const els = {
+      connectBtn: document.querySelector("#connectBtn"),
+      connectLabel: document.querySelector("#connectLabel"),
+      mintBtn: document.querySelector("#mintBtn"),
+      revealBtn: document.querySelector("#revealBtn"),
+      tokenSelect: document.querySelector("#tokenSelect"),
+      minusBtn: document.querySelector("#minusBtn"),
+      plusBtn: document.querySelector("#plusBtn"),
+      qty: document.querySelector("#qty"),
+      totalPrice: document.querySelector("#totalPrice"),
+      mintedCount: document.querySelector("#mintedCount"),
+      maxSupplyLabel: document.querySelector("#maxSupplyLabel"),
+      supplyMeter: document.querySelector("#supplyMeter"),
+      supplyFill: document.querySelector("#supplyFill"),
+      walletState: document.querySelector("#walletState"),
+      walletRemaining: document.querySelector("#walletRemaining"),
+      walletCapNote: document.querySelector("#walletCapNote"),
+      netDot: document.querySelector("#netDot"),
+      netLabel: document.querySelector("#netLabel"),
+      revealPhase: document.querySelector("#revealPhase"),
+      prizePool: document.querySelector("#prizePool"),
+      prizeTiers: document.querySelector("#prizeTiers"),
+      readout: document.querySelector("#readout"),
+      readoutDot: document.querySelector("#readoutDot"),
+      readoutLabel: document.querySelector("#readoutLabel"),
+      readoutMsg: document.querySelector("#readoutMsg"),
+      toast: document.querySelector("#toast")
+    };
+
+    // Reduced motion: hold the poster frame instead of hiding the stage entirely.
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      const video = document.querySelector(".bg-video");
+      video.removeAttribute("autoplay");
+      video.pause();
+    }
+
+    /* ---------------- Ambient audio ---------------- */
+
+    const AUDIO_KEY = "caseflip.sound";
+    const AUDIO_VOLUME = 0.55;
+    const audio = document.querySelector("#bgAudio");
+    const soundBtn = document.querySelector("#soundBtn");
+    let fadeTimer = null;
+
+    function prefersSilent() {
+      try { return localStorage.getItem(AUDIO_KEY) === "off"; } catch (error) { return false; }
+    }
+
+    function rememberSound(on) {
+      try { localStorage.setItem(AUDIO_KEY, on ? "on" : "off"); } catch (error) { /* private mode */ }
+    }
+
+    function syncSoundBtn(on) {
+      soundBtn.setAttribute("aria-pressed", on ? "true" : "false");
+      soundBtn.setAttribute("aria-label", on ? "Turn sound off" : "Turn sound on");
+      soundBtn.title = on ? "Sound on" : "Sound off";
+    }
+
+    function fadeTo(target, done) {
+      window.clearInterval(fadeTimer);
+      if (Math.abs(target - audio.volume) < 0.02) {
+        audio.volume = target;
+        if (done) done();
+        return;
+      }
+      const step = (target - audio.volume) / 16;
+      fadeTimer = window.setInterval(() => {
+        const next = audio.volume + step;
+        if ((step > 0 && next >= target) || (step < 0 && next <= target)) {
+          audio.volume = target;
+          window.clearInterval(fadeTimer);
+          if (done) done();
+        } else {
+          audio.volume = Math.min(1, Math.max(0, next));
+        }
+      }, 28);
+    }
+
+    // The button mirrors the element's real state, so it can never drift out of
+    // sync with what is actually audible (blocked autoplay, media keys, etc).
+    audio.addEventListener("play", () => syncSoundBtn(true));
+    audio.addEventListener("pause", () => syncSoundBtn(false));
+
+    async function startAudio() {
+      audio.volume = 0;
+      await audio.play();
+      fadeTo(AUDIO_VOLUME);
+    }
+
+    function stopAudio() {
+      fadeTo(0, () => audio.pause());
+    }
+
+    soundBtn.addEventListener("click", () => {
+      if (soundBtn.getAttribute("aria-pressed") === "true") {
+        stopAudio();
+        rememberSound(false);
+      } else {
+        startAudio().then(() => rememberSound(true)).catch(() => showToast("Browser blocked audio playback."));
+      }
+    });
+
+    (function armAudio() {
+      syncSoundBtn(false);
+      if (prefersSilent()) return;
+
+      startAudio().then(() => rememberSound(true)).catch(() => {
+        // Audible autoplay needs a user gesture in every modern browser.
+        // Arm a one-shot starter on the first interaction anywhere on the page.
+        const kick = event => {
+          // Let the sound button's own handler own that click, or we'd toggle twice.
+          if (event.target.closest && event.target.closest("#soundBtn")) return;
+          detach();
+          startAudio().then(() => rememberSound(true)).catch(() => {});
+        };
+        const detach = () => {
+          window.removeEventListener("pointerdown", kick);
+          window.removeEventListener("keydown", kick);
+          window.removeEventListener("touchstart", kick);
+        };
+        window.addEventListener("pointerdown", kick);
+        window.addEventListener("keydown", kick);
+        window.addEventListener("touchstart", kick);
+      });
+    })();
+
+    function shortAddress(address) {
+      return `${address.slice(0, 6)}...${address.slice(-4)}`;
+    }
+
+    function showToast(message, isError) {
+      els.toast.textContent = message;
+      els.toast.classList.toggle("is-error", Boolean(isError));
+      els.toast.classList.add("show");
+      window.clearTimeout(showToast.timer);
+      showToast.timer = window.setTimeout(() => els.toast.classList.remove("show"), 4200);
+    }
+
+    function encodeUint256(value) {
+      return BigInt(value).toString(16).padStart(64, "0");
+    }
+
+    function encodeAddress(address) {
+      return address.toLowerCase().replace("0x", "").padStart(64, "0");
+    }
+
+    function hexToNumber(hex) {
+      return Number(BigInt(hex || "0x0"));
+    }
+
+    function hexToBool(hex) {
+      return BigInt(hex || "0x0") !== 0n;
+    }
+
+    function formatPrize(rawAmount) {
+      const value = Number(BigInt(rawAmount)) / 10 ** PRIZE_DECIMALS;
+      return value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    async function rpcCall(data, to = CONTRACT_ADDRESS) {
+      const payload = {
+        jsonrpc: "2.0",
+        id: Date.now(),
+        method: "eth_call",
+        params: [{ to, data }, "latest"]
+      };
+
+      try {
+        const response = await fetch(ROBINHOOD_CHAIN.rpcUrls[0], {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        if (result.error) throw new Error(result.error.message || "RPC call failed");
+        return result.result;
+      } catch (error) {
+        if (!window.ethereum || !state.chainOk) throw error;
+        return window.ethereum.request({
+          method: "eth_call",
+          params: [{ to, data }, "latest"]
+        });
+      }
+    }
+
+    /** Decode an ABI-encoded dynamic string return value (offset, length, bytes). */
+    function decodeAbiString(hex) {
+      const body = strip0x(hex || "");
+      if (body.length < 128) return "";
+      const length = Number(BigInt("0x" + body.slice(64, 128)));
+      const bytes = body.slice(128, 128 + length * 2);
+      let out = "";
+      for (let i = 0; i < bytes.length; i += 2) {
+        out += String.fromCharCode(parseInt(bytes.slice(i, i + 2), 16));
+      }
+      return out.replace(/[^\x20-\x7E]/g, "").trim();
+    }
+
+    function addressFromWord(hex) {
+      return "0x" + strip0x(hex || "").slice(24, 64);
+    }
+
+    async function rpcRequest(method, params) {
+      const response = await fetch(ROBINHOOD_CHAIN.rpcUrls[0], {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: Date.now(), method, params })
+      });
+      const result = await response.json();
+      if (result.error) throw new Error(result.error.message || `${method} failed`);
+      return result.result;
+    }
+
+    /**
+     * The collection is a plain ERC721 (no Enumerable), so a wallet's tokens
+     * cannot be listed on-chain. Derive them from Transfer logs — received
+     * minus sent — then confirm each with ownerOf so a stale or reorged log
+     * can never put a token in the list that the wallet does not actually own.
+     */
+    async function loadOwnedTokens() {
+      if (!state.account) {
+        state.ownedTokens = [];
+        return;
+      }
+
+      const padded = "0x" + strip0x(state.account).toLowerCase().padStart(64, "0");
+      const range = { fromBlock: `0x${DEPLOY_BLOCK.toString(16)}`, toBlock: "latest", address: CONTRACT_ADDRESS };
+
+      state.tokensLoading = true;
+      render();
+
+      try {
+        const [received, sent] = await Promise.all([
+          rpcRequest("eth_getLogs", [{ ...range, topics: [TRANSFER_TOPIC, null, padded] }]),
+          rpcRequest("eth_getLogs", [{ ...range, topics: [TRANSFER_TOPIC, padded] }])
+        ]);
+
+        // Replay both directions in chain order so a token that was sent away
+        // and later re-acquired ends up in the right state.
+        const events = [...received, ...sent].sort((a, b) =>
+          Number(BigInt(a.blockNumber) - BigInt(b.blockNumber)) || Number(BigInt(a.logIndex) - BigInt(b.logIndex))
+        );
+
+        const held = new Set();
+        for (const log of events) {
+          const tokenId = Number(BigInt(log.topics[3]));
+          if (addressFromWord(log.topics[2]).toLowerCase() === state.account.toLowerCase()) held.add(tokenId);
+          else held.delete(tokenId);
+        }
+
+        // ownerOf is the source of truth; the log replay only narrows the set.
+        const owned = [];
+        for (const id of [...held].sort((a, b) => a - b)) {
+          const ownerHex = await rpcCall(`${OWNER_OF_SELECTOR}${encodeUint256(id)}`);
+          if (addressFromWord(ownerHex).toLowerCase() === state.account.toLowerCase()) owned.push(id);
+        }
+
+        state.ownedTokens = owned;
+      } catch (error) {
+        console.warn("Token discovery failed", error);
+        state.ownedTokens = [];
+      } finally {
+        state.tokensLoading = false;
+      }
+
+      syncTokenSelect();
+      await refreshContractState();
+    }
+
+    function syncTokenSelect() {
+      const previous = state.selectedTokenId;
+      els.tokenSelect.innerHTML = "";
+
+      if (!state.ownedTokens.length) {
+        const option = document.createElement("option");
+        option.textContent = !state.account ? "Connect wallet" : state.tokensLoading ? "Loading..." : "No cases yet";
+        option.value = "";
+        els.tokenSelect.appendChild(option);
+        els.tokenSelect.disabled = true;
+        return;
+      }
+
+      for (const id of state.ownedTokens) {
+        const option = document.createElement("option");
+        option.value = String(id);
+        option.textContent = `Case #${String(id).padStart(5, "0")}`;
+        els.tokenSelect.appendChild(option);
+      }
+
+      els.tokenSelect.disabled = false;
+      const keep = state.ownedTokens.includes(previous) ? previous : state.ownedTokens[0];
+      state.selectedTokenId = keep;
+      els.tokenSelect.value = String(keep);
+    }
+
+    /**
+     * Reveal proofs for the selected token. On mainnet they are fetched one
+     * token at a time from REVEAL_PROOF_BASE — never bundled into the page, and
+     * never requested before the contract says reveal is open.
+     */
+    const proofCache = new Map();
+
+    async function loadRevealData(tokenId) {
+      if (proofCache.has(tokenId)) return proofCache.get(tokenId);
+
+      let data = null;
+      if (!REVEAL_PROOF_BASE) {
+        // The inline table only ever described the three testnet tokens. On
+        // mainnet it must not be consulted at all — ids 1-3 exist there too and
+        // would be handed a proof from the wrong tree.
+        data = USE_TESTNET ? (TEST_REVEAL_DATA[tokenId] || null) : null;
+      } else if (state.revealActive) {
+        try {
+          const response = await fetch(`${REVEAL_PROOF_BASE.replace(/\/$/, "")}/${tokenId}.json`, { cache: "no-store" });
+          if (response.ok) data = await response.json();
+        } catch (error) {
+          console.warn("Proof fetch failed", error);
+        }
+      }
+
+      if (data) proofCache.set(tokenId, data);
+      return data;
+    }
+
+    function shortSupply() {
+      return config.maxSupply >= 1000 ? `${config.maxSupply / 1000}K` : String(config.maxSupply);
+    }
+
+    function formatPool() {
+      const whole = Number(config.rewardPool) / 10 ** PRIZE_DECIMALS;
+      return `${whole.toLocaleString("en-US", { maximumFractionDigits: 2 })} ${config.rewardSymbol}`;
+    }
+
+    function strip0x(hex) {
+      return hex.replace(/^0x/, "");
+    }
+
+    function encodeRevealCalldata(tokenId, rewardAmount, salt, proof) {
+      let data = REVEAL_SELECTOR;
+      data += encodeUint256(tokenId);
+      data += encodeUint256(rewardAmount);
+      data += strip0x(salt).padStart(64, "0");
+      data += encodeUint256(128);
+      data += encodeUint256(proof.length);
+      for (const item of proof) {
+        data += strip0x(item).padStart(64, "0");
+      }
+      return data;
+    }
+
+    function formatWalletState() {
+      if (!state.account) return "Not Connected";
+      if (!state.chainOk) return "Wrong Network";
+      if (!state.saleActive && state.minted < config.maxSupply) return "Mint Closed";
+      if (state.minted >= config.maxSupply && state.revealActive) return "Reveal Ready";
+      if (state.minted >= config.maxSupply) return "Sold Out";
+      return "Robinhood Ready";
+    }
+
+    function remainingWalletMints() {
+      return Math.max(0, config.maxPerWallet - state.walletMinted);
+    }
+
+    /**
+     * Copy for the readout panel that sits directly above the Reveal button.
+     * Returns { label, msg, tone } — tone drives the status dot + panel glow.
+     */
+    function revealReadout() {
+      const soldOut = state.minted >= config.maxSupply;
+      const id = state.selectedTokenId;
+      const remaining = Math.max(0, config.maxSupply - state.minted);
+
+      if (state.pending === "reveal") {
+        return { label: "Broadcasting", tone: "live", msg: `Opening case <span class="hl">#${id}</span> on-chain — confirm in your wallet.` };
+      }
+      if (!state.account) {
+        return { label: "Status", tone: "idle", msg: "Connect a wallet to inspect your case." };
+      }
+      if (!state.chainOk) {
+        return { label: "Network", tone: "bad", msg: `Switch to <span class="hl">${ROBINHOOD_CHAIN.chainName}</span> to continue.` };
+      }
+      if (!state.ownedTokens.length) {
+        return state.tokensLoading
+          ? { label: "Scanning", tone: "idle", msg: "Looking up the cases in this wallet..." }
+          : { label: "Empty", tone: "idle", msg: "This wallet holds no cases yet. Mint one to play." };
+      }
+      if (state.selectedTokenRevealed) {
+        // revealedReward() is on-chain, so the opened result never depends on
+        // the proof file being reachable.
+        const prize = state.revealPrize;
+        if (prize && prize > 0n) {
+          return { label: "Opened", tone: "live", open: true, msg: `Case #${id} → <span class="hl">${formatPrize(prize)} ${config.rewardSymbol}</span>` };
+        }
+        return { label: "Opened", tone: "idle", open: true, msg: `Case #${id} → <span class="hl">No prize</span>` };
+      }
+      if (!soldOut) {
+        return { label: "Locked", tone: "idle", msg: `Reveal unlocks at sellout — <span class="hl">${remaining.toLocaleString("en-US")}</span> case${remaining === 1 ? "" : "s"} left to mint.` };
+      }
+      if (!state.revealActive) {
+        return { label: "Standby", tone: "idle", msg: "Sellout complete. Waiting for the reveal signal from the contract." };
+      }
+      return { label: "Armed", tone: "live", msg: `Case <span class="hl">#${id}</span> is sealed and ready to open.` };
+    }
+
+    function setDot(el, tone) {
+      el.className = "dot" + (tone === "live" ? " is-live" : tone === "bad" ? " is-bad" : " is-idle");
+    }
+
+    function render() {
+      const soldOut = state.minted >= config.maxSupply;
+      const walletLeft = remainingWalletMints();
+      const maxQty = Math.max(1, Math.min(config.maxPerWallet, walletLeft));
+      state.qty = Math.min(state.qty, maxQty);
+
+      // ----- Mint panel -----
+      els.qty.textContent = state.qty;
+      const totalEth = Number(config.mintPriceWei * BigInt(state.qty)) / 1e18;
+      els.totalPrice.textContent = `${totalEth.toFixed(6)} ETH`;
+      els.mintedCount.textContent = state.minted.toLocaleString("en-US");
+      els.maxSupplyLabel.textContent = shortSupply();
+      els.prizePool.textContent = formatPool();
+
+      const pct = Math.min(100, Math.round((state.minted / config.maxSupply) * 100));
+      els.supplyFill.style.width = `${pct}%`;
+      els.supplyMeter.setAttribute("aria-valuenow", String(pct));
+      els.supplyMeter.setAttribute("aria-valuetext", `${state.minted} of ${config.maxSupply} minted`);
+
+      els.walletState.textContent = formatWalletState();
+      els.walletRemaining.textContent = state.account ? `${walletLeft} Left` : `${config.maxPerWallet} Max`;
+      els.walletCapNote.textContent = `Max ${config.maxPerWallet} / Wallet`;
+
+      // ----- Top bar -----
+      els.connectLabel.textContent = state.account ? shortAddress(state.account) : "Connect";
+      els.connectBtn.classList.toggle("is-connected", Boolean(state.account));
+      els.connectBtn.title = state.account ? "Disconnect wallet" : "Connect wallet";
+      els.connectBtn.setAttribute("aria-label", state.account
+        ? `Disconnect wallet ${shortAddress(state.account)}`
+        : "Connect wallet");
+      els.netLabel.textContent = ROBINHOOD_CHAIN.chainName;
+      setDot(els.netDot, !state.account ? "idle" : state.chainOk ? "live" : "bad");
+
+      // ----- Buttons -----
+      const busy = state.pending !== null;
+      els.minusBtn.disabled = state.qty <= 1 || busy;
+      els.plusBtn.disabled = state.qty >= maxQty || busy;
+
+      // The contract starts with the sale closed, so the button has to say so
+      // rather than letting a click revert with SaleInactive.
+      els.mintBtn.disabled = busy || soldOut || !state.saleActive || (Boolean(state.account) && walletLeft === 0);
+      els.mintBtn.classList.toggle("is-busy", state.pending === "mint");
+      els.mintBtn.textContent =
+        state.pending === "mint" ? "Minting" :
+        soldOut ? "Sold Out" :
+        !state.saleActive ? "Mint Not Open" :
+        !state.account ? "Connect Wallet" :
+        !state.chainOk ? "Switch Network" :
+        walletLeft === 0 ? "Limit Reached" :
+        `Mint ${state.qty}`;
+
+      const canReveal = soldOut && state.revealActive && !state.selectedTokenRevealed && state.ownedTokens.length > 0;
+      els.revealBtn.disabled = busy || (Boolean(state.account) && state.chainOk && !canReveal);
+      els.revealBtn.classList.toggle("is-busy", state.pending === "reveal");
+      els.revealBtn.textContent =
+        state.pending === "reveal" ? "Revealing" :
+        !state.account ? "Connect Wallet" :
+        !state.chainOk ? "Switch Network" :
+        state.tokensLoading ? "Loading" :
+        !state.ownedTokens.length ? "No Cases" :
+        state.selectedTokenRevealed ? "Revealed" :
+        !soldOut || !state.revealActive ? "Reveal Locked" :
+        `Open Case #${state.selectedTokenId}`;
+
+      // ----- Readout -----
+      const info = revealReadout();
+      els.readoutLabel.textContent = info.label;
+      els.readoutMsg.innerHTML = info.msg;
+      setDot(els.readoutDot, info.tone);
+      els.readout.classList.toggle("is-live", info.tone === "live");
+      els.readout.classList.toggle("is-open", Boolean(info.open));
+      els.revealPhase.textContent = info.label;
+    }
+
+    /**
+     * Pull maxSupply / maxPerWallet / mintPrice from the contract once on boot.
+     * These are immutable on-chain, so a single read is enough. On failure the
+     * built-in fallbacks stay in place and the UI still works.
+     */
+    async function loadChainConfig() {
+      if (CONTRACT_ADDRESS === "0x0000000000000000000000000000000000000000") return;
+
+      try {
+        const [supplyHex, perWalletHex, priceHex, poolHex, tokenHex] = await Promise.all([
+          rpcCall(MAX_SUPPLY_SELECTOR),
+          rpcCall(MAX_PER_WALLET_SELECTOR),
+          rpcCall(MINT_PRICE_SELECTOR),
+          rpcCall(TOTAL_REWARD_POOL_SELECTOR),
+          rpcCall(REWARD_TOKEN_SELECTOR)
+        ]);
+
+        const maxSupply = hexToNumber(supplyHex);
+        const maxPerWallet = hexToNumber(perWalletHex);
+        const mintPriceWei = BigInt(priceHex || "0x0");
+        const rewardPool = BigInt(poolHex || "0x0");
+
+        // A wrong address or a non-contract returns 0x — never trust that over the fallback.
+        if (maxSupply > 0 && maxPerWallet > 0) {
+          config.maxSupply = maxSupply;
+          config.maxPerWallet = maxPerWallet;
+          config.mintPriceWei = mintPriceWei;
+          if (rewardPool > 0n) config.rewardPool = rewardPool;
+          config.loaded = true;
+        }
+
+        // Ticker comes from the reward token itself, so testnet shows mUSDG
+        // and mainnet shows USDG without a code change.
+        const tokenAddress = addressFromWord(tokenHex);
+        if (/^0x[0-9a-f]{40}$/i.test(tokenAddress) && BigInt(tokenAddress) !== 0n) {
+          const symbol = decodeAbiString(await rpcCall(ERC20_SYMBOL_SELECTOR, tokenAddress));
+          if (symbol) config.rewardSymbol = symbol;
+        }
+      } catch (error) {
+        console.warn("Chain config read failed, using built-in fallbacks", error);
+      }
+
+      render();
+    }
+
+    async function refreshContractState() {
+      if (CONTRACT_ADDRESS === "0x0000000000000000000000000000000000000000") return;
+
+      try {
+        const mintedHex = await rpcCall(TOTAL_MINTED_SELECTOR);
+        state.minted = hexToNumber(mintedHex);
+
+        if (state.account) {
+          const walletMintedHex = await rpcCall(`${MINTED_BY_WALLET_SELECTOR}${encodeAddress(state.account)}`);
+          state.walletMinted = hexToNumber(walletMintedHex);
+        }
+
+        const [saleActiveHex, revealActiveHex] = await Promise.all([
+          rpcCall(SALE_ACTIVE_SELECTOR),
+          rpcCall(REVEAL_ACTIVE_SELECTOR)
+        ]);
+        state.saleActive = hexToBool(saleActiveHex);
+        state.revealActive = hexToBool(revealActiveHex);
+
+        const revealedHex = await rpcCall(`${REVEALED_SELECTOR}${encodeUint256(state.selectedTokenId)}`);
+        state.selectedTokenRevealed = hexToBool(revealedHex);
+
+        state.revealPrize = state.selectedTokenRevealed
+          ? BigInt(await rpcCall(`${REVEALED_REWARD_SELECTOR}${encodeUint256(state.selectedTokenId)}`) || "0x0")
+          : null;
+      } catch (error) {
+        console.warn("Contract state refresh failed", error);
+      }
+
+      render();
+    }
+
+    async function revealSelected() {
+      if (!state.account) {
+        await connectWallet();
+        return;
+      }
+
+      if (!state.chainOk) {
+        await switchToRobinhood();
+        return;
+      }
+
+      await refreshContractState();
+
+      if (!state.revealActive) {
+        showToast("Reveal is not active yet.");
+        return;
+      }
+
+      const tokenId = Number(els.tokenSelect.value);
+      if (!state.ownedTokens.includes(tokenId)) {
+        showToast("This wallet does not hold that case.", true);
+        return;
+      }
+
+      const data = await loadRevealData(tokenId);
+      if (!data) {
+        showToast("Reveal data for this case is not available yet.", true);
+        return;
+      }
+
+      const tx = {
+        from: state.account,
+        to: CONTRACT_ADDRESS,
+        data: encodeRevealCalldata(tokenId, data.rewardAmount, data.salt, data.proof),
+        value: "0x0"
+      };
+
+      try {
+        state.pending = "reveal";
+        render();
+        const hash = await window.ethereum.request({
+          method: "eth_sendTransaction",
+          params: [tx]
+        });
+        showToast(`Reveal sent: ${hash.slice(0, 10)}...${hash.slice(-6)}`);
+        window.setTimeout(refreshContractState, 2500);
+      } catch (error) {
+        showToast(error?.message || "Reveal transaction rejected.", true);
+      } finally {
+        state.pending = null;
+        render();
+      }
+    }
+
+    async function switchToRobinhood() {
+      if (!window.ethereum) {
+        showToast("EVM wallet not found.", true);
+        return;
+      }
+
+      try {
+        await window.ethereum.request({
+          method: "wallet_switchEthereumChain",
+          params: [{ chainId: ROBINHOOD_CHAIN.chainId }]
+        });
+      } catch (error) {
+        if (error.code === 4902) {
+          await window.ethereum.request({
+            method: "wallet_addEthereumChain",
+            params: [ROBINHOOD_CHAIN]
+          });
+        } else {
+          throw error;
+        }
+      }
+
+      state.chainOk = true;
+      await refreshContractState();
+      showToast("Robinhood Chain ready.");
+    }
+
+    async function connectWallet() {
+      if (!window.ethereum) {
+        showToast("EVM wallet not found.", true);
+        return;
+      }
+
+      const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+      state.account = accounts[0];
+      const chainId = await window.ethereum.request({ method: "eth_chainId" });
+      state.chainOk = chainId.toLowerCase() === ROBINHOOD_CHAIN.chainId.toLowerCase();
+      await refreshContractState();
+
+      if (!state.chainOk) {
+        await switchToRobinhood();
+      }
+
+      await loadOwnedTokens();
+    }
+
+    /**
+     * There is no standard way for a site to close a wallet connection — the
+     * permission lives in the wallet, not here. So this clears every trace on
+     * our side, then asks the wallet to drop the permission too where that is
+     * supported (MetaMask's wallet_revokePermissions), which is what makes the
+     * next Connect prompt again instead of silently reattaching.
+     */
+    async function disconnectWallet() {
+      state.account = null;
+      state.walletMinted = 0;
+      state.ownedTokens = [];
+      state.selectedTokenRevealed = false;
+      state.revealPrize = null;
+      state.qty = 1;
+      proofCache.clear();
+
+      syncTokenSelect();
+      render();
+
+      try {
+        await window.ethereum?.request({
+          method: "wallet_revokePermissions",
+          params: [{ eth_accounts: {} }]
+        });
+      } catch (error) {
+        // Older wallets simply do not implement it; the local state is already
+        // cleared, so there is nothing to report to the user.
+      }
+
+      showToast("Wallet disconnected.");
+      refreshContractState();
+    }
+
+    async function mint() {
+      if (!state.account) {
+        await connectWallet();
+        return;
+      }
+
+      if (!state.chainOk) {
+        await switchToRobinhood();
+        return;
+      }
+
+      if (state.minted >= config.maxSupply) {
+        showToast("Sold out.");
+        render();
+        return;
+      }
+
+      if (!state.saleActive) {
+        showToast("Minting is not open yet.");
+        return;
+      }
+
+      if (CONTRACT_ADDRESS === "0x0000000000000000000000000000000000000000") {
+        showToast("Contract address is not set yet.", true);
+        return;
+      }
+
+      if (state.qty > remainingWalletMints()) {
+        showToast("Wallet mint limit is 10.");
+        return;
+      }
+
+      const tx = {
+        from: state.account,
+        to: CONTRACT_ADDRESS,
+        data: `${MINT_SELECTOR}${encodeUint256(state.qty)}`,
+        value: `0x${(config.mintPriceWei * BigInt(state.qty)).toString(16)}`
+      };
+
+      try {
+        state.pending = "mint";
+        render();
+        const hash = await window.ethereum.request({
+          method: "eth_sendTransaction",
+          params: [tx]
+        });
+        state.walletMinted += state.qty;
+        state.minted += state.qty;
+        showToast(`Mint sent: ${hash.slice(0, 10)}...${hash.slice(-6)}`);
+        // New tokens need to show up in the reveal picker once the tx lands.
+        window.setTimeout(loadOwnedTokens, 4000);
+      } catch (error) {
+        showToast(error?.message || "Mint transaction rejected.", true);
+      } finally {
+        state.pending = null;
+        render();
+      }
+    }
+
+    els.minusBtn.addEventListener("click", () => {
+      state.qty = Math.max(1, state.qty - 1);
+      render();
+    });
+
+    els.plusBtn.addEventListener("click", () => {
+      state.qty = Math.min(config.maxPerWallet, Math.max(1, remainingWalletMints()), state.qty + 1);
+      render();
+    });
+
+    els.connectBtn.addEventListener("click", () => {
+      if (state.account) disconnectWallet();
+      else connectWallet();
+    });
+    els.mintBtn.addEventListener("click", mint);
+    els.revealBtn.addEventListener("click", revealSelected);
+    els.tokenSelect.addEventListener("change", () => {
+      state.selectedTokenId = Number(els.tokenSelect.value);
+      render();
+      refreshContractState();
+    });
+
+    if (window.ethereum) {
+      window.ethereum.on("accountsChanged", accounts => {
+        state.account = accounts[0] || null;
+        proofCache.clear();
+        loadOwnedTokens();
+      });
+
+      window.ethereum.on("chainChanged", chainId => {
+        state.chainOk = chainId.toLowerCase() === ROBINHOOD_CHAIN.chainId.toLowerCase();
+        refreshContractState();
+      });
+    }
+
+    // Static ladder — built once, no chain dependency.
+    function renderPrizeTiers() {
+      els.prizeTiers.innerHTML = "";
+      PRIZE_TIERS.forEach((amount, index) => {
+        const chip = document.createElement("span");
+        chip.className = index === 0 ? "tier tier--top" : "tier";
+        chip.textContent = `$${amount.toLocaleString("en-US")}`;
+        els.prizeTiers.appendChild(chip);
+      });
+    }
+
+    renderPrizeTiers();
+    syncTokenSelect();
+    render();
+    loadChainConfig();
+    refreshContractState();
+    window.setInterval(refreshContractState, 5000);
+  </script>
+</body>
+</html>

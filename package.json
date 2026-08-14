@@ -1,0 +1,18 @@
+{
+  "name": "case-flip",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "compile": "hardhat compile",
+    "deploy:robinhood": "hardhat run scripts/deploy-case-flip.js --network robinhood",
+    "deploy:testnet": "hardhat run scripts/deploy-test-case-flip.js --network robinhoodTestnet",
+    "sale:testnet": "hardhat run scripts/set-sale-active.js --network robinhoodTestnet",
+    "baseuri:testnet": "hardhat run scripts/set-base-uri.js --network robinhoodTestnet",
+    "reveal:testnet": "hardhat run scripts/start-test-reveal.js --network robinhoodTestnet"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@openzeppelin/contracts": "^5.0.2",
+    "hardhat": "^2.22.0"
+  }
+}

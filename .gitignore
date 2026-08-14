@@ -1,0 +1,14 @@
+node_modules/
+artifacts/
+cache/
+
+# Secrets
+.env
+.env.*
+*.key
+
+# Derived + reward data. Reveal data must never reach a remote before
+# startReveal() — publishing it early lets anyone read the prize map.
+generated/
+reveal-data*.json
+*.private.json
