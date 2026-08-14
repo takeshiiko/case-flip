@@ -26,5 +26,32 @@ module.exports = {
       chainId: 46630,
       accounts: DEPLOYER_PRIVATE_KEY ? [DEPLOYER_PRIVATE_KEY] : []
     }
-  }
+  },
+  // Blockscout speaks the Etherscan verification API but ignores the key, so
+  // the placeholder below is fine and nothing secret belongs here.
+  etherscan: {
+    apiKey: {
+      robinhood: "blockscout",
+      robinhoodTestnet: "blockscout"
+    },
+    customChains: [
+      {
+        network: "robinhood",
+        chainId: 4663,
+        urls: {
+          apiURL: "https://robinhoodchain.blockscout.com/api",
+          browserURL: "https://robinhoodchain.blockscout.com"
+        }
+      },
+      {
+        network: "robinhoodTestnet",
+        chainId: 46630,
+        urls: {
+          apiURL: "https://explorer.testnet.chain.robinhood.com/api",
+          browserURL: "https://explorer.testnet.chain.robinhood.com"
+        }
+      }
+    ]
+  },
+  sourcify: { enabled: false }
 };
