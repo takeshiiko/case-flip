@@ -701,6 +701,127 @@
     .toast.show { opacity: 1; transform: translate(-50%, 0); }
     .toast.is-error { border-color: rgba(255, 90, 77, 0.6); }
 
+    /* ---------- Wallet picker ---------- */
+
+    .picker {
+      position: fixed;
+      inset: 0;
+      z-index: 30;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: rgba(3, 5, 0, 0.78);
+      backdrop-filter: blur(6px);
+    }
+
+    .picker[hidden] { display: none; }
+
+    .picker-card {
+      position: relative;
+      width: min(360px, 100%);
+      border: 1px solid var(--line-strong);
+      background: var(--panel-solid);
+      padding: var(--space-3);
+      box-shadow: 0 30px 90px rgba(0, 0, 0, 0.6), 0 0 48px rgba(232, 255, 0, 0.12);
+      animation: rise 220ms var(--ease) both;
+    }
+
+    .picker-card::before,
+    .picker-card::after {
+      content: "";
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      border: 1px solid var(--volt);
+      opacity: 0.7;
+      pointer-events: none;
+    }
+    .picker-card::before { top: -1px; left: -1px; border-width: 1px 0 0 1px; }
+    .picker-card::after { bottom: -1px; right: -1px; border-width: 0 1px 1px 0; }
+
+    .picker-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: var(--space-2);
+      padding-bottom: 9px;
+      border-bottom: 1px solid rgba(232, 255, 0, 0.16);
+    }
+
+    .picker-close {
+      width: 30px;
+      height: 30px;
+      border: 1px solid var(--line);
+      background: transparent;
+      color: var(--muted);
+      font-size: 17px;
+      line-height: 1;
+      cursor: pointer;
+      transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+    }
+    .picker-close:hover { color: var(--volt); border-color: var(--volt); }
+    .picker-close:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ink), 0 0 0 4px var(--volt); }
+
+    .picker-list { display: grid; gap: 8px; }
+
+    .wallet-option {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      min-height: 54px;
+      padding: 0 14px;
+      border: 1px solid var(--line);
+      background: rgba(3, 5, 0, 0.5);
+      color: var(--text);
+      font-family: var(--display);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      text-align: left;
+      cursor: pointer;
+      transition: border-color var(--dur) var(--ease), background-color var(--dur) var(--ease);
+    }
+
+    .wallet-option:hover { border-color: var(--volt); background: rgba(232, 255, 0, 0.1); }
+    .wallet-option:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ink), 0 0 0 4px var(--volt); }
+
+    .wallet-option img {
+      width: 26px;
+      height: 26px;
+      flex: none;
+      border-radius: 4px;
+    }
+
+    .wallet-option .fallback {
+      width: 26px;
+      height: 26px;
+      flex: none;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--line);
+      color: var(--volt);
+      font-size: 12px;
+    }
+
+    .wallet-option .last-used {
+      margin-left: auto;
+      font-family: var(--body);
+      font-size: 9px;
+      letter-spacing: 0.14em;
+      color: var(--muted);
+    }
+
+    .picker-empty {
+      padding: 10px 2px;
+      font-size: 12px;
+      line-height: 1.6;
+      color: var(--muted);
+    }
+
+    .picker-empty a { color: var(--volt); }
+
     .sr-only {
       position: absolute;
       width: 1px; height: 1px;
@@ -945,6 +1066,16 @@
     </section>
   </main>
 
+  <div class="picker" id="walletPicker" role="dialog" aria-modal="true" aria-labelledby="pickerTitle" hidden>
+    <div class="picker-card">
+      <div class="picker-head">
+        <h2 class="panel-title" id="pickerTitle">Choose Wallet</h2>
+        <button class="picker-close" id="pickerClose" type="button" aria-label="Close">&#215;</button>
+      </div>
+      <div class="picker-list" id="pickerList"></div>
+    </div>
+  </div>
+
   <audio id="bgAudio" src="assets/banker.mp3" loop preload="auto"></audio>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -1048,7 +1179,41 @@
       }
     };
 
+    /**
+     * Wallet discovery (EIP-6963).
+     *
+     * With more than one extension installed they all race to own
+     * `window.ethereum`, so whichever wrote last is the one that opens — which
+     * is why the same button could bring up MetaMask one time and Rabby the
+     * next. EIP-6963 has each wallet announce itself separately, so they can be
+     * listed and picked deliberately.
+     */
+    const wallets = new Map();          // rdns -> { info, provider }
+    const WALLET_KEY = "caseflip.wallet";
+
+    window.addEventListener("eip6963:announceProvider", event => {
+      const { info, provider } = event.detail;
+      if (info?.rdns) wallets.set(info.rdns, { info, provider });
+    });
+    window.dispatchEvent(new Event("eip6963:requestProvider"));
+
+    function listWallets() {
+      const found = [...wallets.values()];
+      if (found.length) return found;
+      // Nothing announced: fall back to the legacy injected provider so older
+      // wallets still work.
+      if (window.ethereum) {
+        return [{
+          info: { rdns: "legacy", name: window.ethereum.isMetaMask ? "MetaMask" : "Injected Wallet", icon: null },
+          provider: window.ethereum
+        }];
+      }
+      return [];
+    }
+
     const state = {
+      provider: null,
+      walletName: null,
       qty: 1,
       minted: 0,
       walletMinted: 0,
@@ -1067,6 +1232,8 @@
     const els = {
       connectBtn: document.querySelector("#connectBtn"),
       connectLabel: document.querySelector("#connectLabel"),
+      picker: document.querySelector("#walletPicker"),
+      pickerClose: document.querySelector("#pickerClose"),
       mintBtn: document.querySelector("#mintBtn"),
       revealBtn: document.querySelector("#revealBtn"),
       tokenSelect: document.querySelector("#tokenSelect"),
@@ -1241,8 +1408,8 @@
         if (result.error) throw new Error(result.error.message || "RPC call failed");
         return result.result;
       } catch (error) {
-        if (!window.ethereum || !state.chainOk) throw error;
-        return window.ethereum.request({
+        if (!state.provider || !state.chainOk) throw error;
+        return state.provider.request({
           method: "eth_call",
           params: [{ to, data }, "latest"]
         });
@@ -1663,7 +1830,7 @@
       try {
         state.pending = "reveal";
         render();
-        const hash = await window.ethereum.request({
+        const hash = await state.provider.request({
           method: "eth_sendTransaction",
           params: [tx]
         });
@@ -1678,19 +1845,19 @@
     }
 
     async function switchToRobinhood() {
-      if (!window.ethereum) {
+      if (!state.provider) {
         showToast("EVM wallet not found.", true);
         return;
       }
 
       try {
-        await window.ethereum.request({
+        await state.provider.request({
           method: "wallet_switchEthereumChain",
           params: [{ chainId: ROBINHOOD_CHAIN.chainId }]
         });
       } catch (error) {
         if (error.code === 4902) {
-          await window.ethereum.request({
+          await state.provider.request({
             method: "wallet_addEthereumChain",
             params: [ROBINHOOD_CHAIN]
           });
@@ -1704,23 +1871,113 @@
       showToast("Robinhood Chain ready.");
     }
 
-    async function connectWallet() {
-      if (!window.ethereum) {
-        showToast("EVM wallet not found.", true);
-        return;
-      }
+    /** Bind to one provider. Listeners follow the selection, not window.ethereum. */
+    function useWallet(entry) {
+      state.provider = entry.provider;
+      state.walletName = entry.info.name;
 
-      const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
-      state.account = accounts[0];
-      const chainId = await window.ethereum.request({ method: "eth_chainId" });
+      entry.provider.removeListener?.("accountsChanged", onAccountsChanged);
+      entry.provider.removeListener?.("chainChanged", onChainChanged);
+      entry.provider.on?.("accountsChanged", onAccountsChanged);
+      entry.provider.on?.("chainChanged", onChainChanged);
+
+      try { localStorage.setItem(WALLET_KEY, entry.info.rdns); } catch (error) { /* private mode */ }
+    }
+
+    function onAccountsChanged(accounts) {
+      state.account = accounts[0] || null;
+      proofCache.clear();
+      loadOwnedTokens();
+    }
+
+    function onChainChanged(chainId) {
       state.chainOk = chainId.toLowerCase() === ROBINHOOD_CHAIN.chainId.toLowerCase();
-      await refreshContractState();
+      refreshContractState();
+    }
 
-      if (!state.chainOk) {
-        await switchToRobinhood();
+    function openWalletPicker() {
+      const found = listWallets();
+      const list = document.querySelector("#pickerList");
+      list.innerHTML = "";
+
+      if (!found.length) {
+        list.innerHTML = '<p class="picker-empty">No EVM wallet detected. Install one — ' +
+          '<a href="https://metamask.io" target="_blank" rel="noopener">MetaMask</a> or ' +
+          '<a href="https://rabby.io" target="_blank" rel="noopener">Rabby</a> — then reload.</p>';
+      } else {
+        let remembered = null;
+        try { remembered = localStorage.getItem(WALLET_KEY); } catch (error) { /* ignore */ }
+
+        for (const entry of found) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "wallet-option";
+
+          if (entry.info.icon) {
+            const img = document.createElement("img");
+            img.src = entry.info.icon;
+            img.alt = "";
+            button.appendChild(img);
+          } else {
+            const box = document.createElement("span");
+            box.className = "fallback";
+            box.textContent = (entry.info.name || "?").slice(0, 1);
+            button.appendChild(box);
+          }
+
+          button.appendChild(document.createTextNode(entry.info.name || entry.info.rdns));
+
+          if (entry.info.rdns === remembered) {
+            const tag = document.createElement("span");
+            tag.className = "last-used";
+            tag.textContent = "LAST USED";
+            button.appendChild(tag);
+          }
+
+          button.addEventListener("click", () => {
+            closeWalletPicker();
+            connectWith(entry);
+          });
+          list.appendChild(button);
+        }
       }
 
-      await loadOwnedTokens();
+      els.picker.hidden = false;
+      list.querySelector("button")?.focus();
+    }
+
+    function closeWalletPicker() {
+      els.picker.hidden = true;
+      els.connectBtn.focus();
+    }
+
+    async function connectWith(entry) {
+      useWallet(entry);
+      try {
+        const accounts = await entry.provider.request({ method: "eth_requestAccounts" });
+        state.account = accounts[0];
+        const chainId = await entry.provider.request({ method: "eth_chainId" });
+        state.chainOk = chainId.toLowerCase() === ROBINHOOD_CHAIN.chainId.toLowerCase();
+        await refreshContractState();
+
+        if (!state.chainOk) await switchToRobinhood();
+        await loadOwnedTokens();
+      } catch (error) {
+        state.provider = null;
+        state.walletName = null;
+        render();
+        showToast(error?.code === 4001 ? "Connection rejected." : (error?.message || "Could not connect."), true);
+      }
+    }
+
+    async function connectWallet() {
+      const found = listWallets();
+      if (!found.length) { openWalletPicker(); return; }
+
+      // One wallet is not a choice — skip the dialog. With several, the previous
+      // pick is only a default, never automatic: the user still confirms.
+      if (found.length === 1) { await connectWith(found[0]); return; }
+      openWalletPicker();
     }
 
     /**
@@ -1743,7 +2000,7 @@
       render();
 
       try {
-        await window.ethereum?.request({
+        await state.provider?.request({
           method: "wallet_revokePermissions",
           params: [{ eth_accounts: {} }]
         });
@@ -1784,7 +2041,7 @@
       }
 
       if (state.qty > remainingWalletMints()) {
-        showToast("Wallet mint limit is 10.");
+        showToast(`Wallet mint limit is ${config.maxPerWallet}.`);
         return;
       }
 
@@ -1798,7 +2055,7 @@
       try {
         state.pending = "mint";
         render();
-        const hash = await window.ethereum.request({
+        const hash = await state.provider.request({
           method: "eth_sendTransaction",
           params: [tx]
         });
@@ -1837,18 +2094,17 @@
       refreshContractState();
     });
 
-    if (window.ethereum) {
-      window.ethereum.on("accountsChanged", accounts => {
-        state.account = accounts[0] || null;
-        proofCache.clear();
-        loadOwnedTokens();
-      });
+    // Provider events are attached in useWallet(), once a wallet is actually
+    // chosen — binding them here would tie the page to whichever extension won
+    // the window.ethereum race.
 
-      window.ethereum.on("chainChanged", chainId => {
-        state.chainOk = chainId.toLowerCase() === ROBINHOOD_CHAIN.chainId.toLowerCase();
-        refreshContractState();
-      });
-    }
+    els.pickerClose.addEventListener("click", closeWalletPicker);
+    els.picker.addEventListener("click", event => {
+      if (event.target === els.picker) closeWalletPicker();
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape" && !els.picker.hidden) closeWalletPicker();
+    });
 
     // Static ladder — built once, no chain dependency.
     function renderPrizeTiers() {
