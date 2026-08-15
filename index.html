@@ -1005,7 +1005,7 @@
           <div class="field">
             <span class="field-label" id="qtyLabel">Quantity</span>
             <div class="controls">
-              <button class="step" id="minusBtn" type="button" aria-label="Decrease quantity">−</button>
+              <button class="step" id="minusBtn" type="button" aria-label="Decrease quantity">-</button>
               <div class="qty" id="qty" role="status" aria-live="polite" aria-labelledby="qtyLabel">1</div>
               <button class="step" id="plusBtn" type="button" aria-label="Increase quantity">+</button>
             </div>
@@ -1361,6 +1361,43 @@
       return `${address.slice(0, 6)}...${address.slice(-4)}`;
     }
 
+    /**
+     * Wallets return anything from a one-liner to a full JSON-RPC dump with a
+     * stack trace, and pasting that raw into the toast is unreadable. Map the
+     * cases that actually happen, surface the contract's own error name when it
+     * reverted, and cut whatever is left down to one short line.
+     */
+    const CONTRACT_ERRORS = {
+      SaleInactive: "Minting is not open.",
+      RevealInactive: "Reveal is not open yet.",
+      ExceedsMaxSupply: "That would go past the 20,000 supply.",
+      ExceedsPerWalletLimit: "That would go past the per-wallet limit.",
+      InvalidQuantity: "Pick at least one case.",
+      IncorrectPayment: "The amount sent does not match the mint price.",
+      InvalidProof: "This case's reveal data did not check out.",
+      AlreadyRevealed: "This case is already open.",
+      NotTokenOwner: "This wallet does not hold that case.",
+      NotSoldOut: "Reveal opens once the collection sells out.",
+      RevealAlreadyStarted: "Reveal has already started.",
+      SweepLocked: "Still inside the 15-day claim window."
+    };
+
+    function walletError(error, fallback) {
+      if (!error) return fallback;
+      if (error.code === 4001 || error.code === "ACTION_REJECTED") return "Rejected in wallet.";
+      if (error.code === -32002) return "A wallet request is already open. Check your wallet.";
+
+      const raw = [error.message, error.data?.message, error.reason].filter(Boolean).join(" ");
+      for (const [name, text] of Object.entries(CONTRACT_ERRORS)) {
+        if (raw.includes(name)) return text;
+      }
+      if (/insufficient funds/i.test(raw)) return "Not enough ETH for the mint plus gas.";
+
+      const line = raw.split("\n")[0].replace(/\s+/g, " ").trim();
+      if (!line) return fallback;
+      return line.length > 110 ? line.slice(0, 107) + "..." : line;
+    }
+
     function showToast(message, isError) {
       els.toast.textContent = message;
       els.toast.classList.toggle("is-error", Boolean(isError));
@@ -1426,7 +1463,10 @@
       for (let i = 0; i < bytes.length; i += 2) {
         out += String.fromCharCode(parseInt(bytes.slice(i, i + 2), 16));
       }
-      return out.replace(/[^\x20-\x7E]/g, "").trim();
+      // This ends up interpolated into markup, and the source is a contract
+      // rather than us — so restrict it to what a ticker can legitimately be
+      // instead of trusting it to be inert.
+      return out.replace(/[^A-Za-z0-9._-]/g, "").slice(0, 12);
     }
 
     function addressFromWord(hex) {
@@ -1612,7 +1652,7 @@
       const remaining = Math.max(0, config.maxSupply - state.minted);
 
       if (state.pending === "reveal") {
-        return { label: "Broadcasting", tone: "live", msg: `Opening case <span class="hl">#${id}</span> on-chain — confirm in your wallet.` };
+        return { label: "Broadcasting", tone: "live", msg: `Opening case <span class="hl">#${id}</span> on-chain. Confirm in your wallet.` };
       }
       if (!state.account) {
         return { label: "Status", tone: "idle", msg: "Connect a wallet to inspect your case." };
@@ -1630,12 +1670,12 @@
         // the proof file being reachable.
         const prize = state.revealPrize;
         if (prize && prize > 0n) {
-          return { label: "Opened", tone: "live", open: true, msg: `Case #${id} → <span class="hl">${formatPrize(prize)} ${config.rewardSymbol}</span>` };
+          return { label: "Opened", tone: "live", open: true, msg: `Case #${id} -&gt; <span class="hl">${formatPrize(prize)} ${config.rewardSymbol}</span>` };
         }
-        return { label: "Opened", tone: "idle", open: true, msg: `Case #${id} → <span class="hl">No prize</span>` };
+        return { label: "Opened", tone: "idle", open: true, msg: `Case #${id} -&gt; <span class="hl">No prize</span>` };
       }
       if (!soldOut) {
-        return { label: "Locked", tone: "idle", msg: `Reveal unlocks at sellout — <span class="hl">${remaining.toLocaleString("en-US")}</span> case${remaining === 1 ? "" : "s"} left to mint.` };
+        return { label: "Locked", tone: "idle", msg: `Reveal unlocks at sellout - <span class="hl">${remaining.toLocaleString("en-US")}</span> case${remaining === 1 ? "" : "s"} left to mint.` };
       }
       if (!state.revealActive) {
         return { label: "Standby", tone: "idle", msg: "Sellout complete. Waiting for the reveal signal from the contract." };
@@ -1845,7 +1885,7 @@
         showToast(`Reveal sent: ${hash.slice(0, 10)}...${hash.slice(-6)}`);
         window.setTimeout(refreshContractState, 2500);
       } catch (error) {
-        showToast(error?.message || "Reveal transaction rejected.", true);
+        showToast(walletError(error, "Reveal transaction rejected."), true);
       } finally {
         state.pending = null;
         render();
@@ -1909,9 +1949,9 @@
       list.innerHTML = "";
 
       if (!found.length) {
-        list.innerHTML = '<p class="picker-empty">No EVM wallet detected. Install one — ' +
+        list.innerHTML = '<p class="picker-empty">No EVM wallet detected. Install one: ' +
           '<a href="https://metamask.io" target="_blank" rel="noopener">MetaMask</a> or ' +
-          '<a href="https://rabby.io" target="_blank" rel="noopener">Rabby</a> — then reload.</p>';
+          '<a href="https://rabby.io" target="_blank" rel="noopener">Rabby</a>. Then reload.</p>';
       } else {
         let remembered = null;
         try { remembered = localStorage.getItem(WALLET_KEY); } catch (error) { /* ignore */ }
@@ -1921,7 +1961,10 @@
           button.type = "button";
           button.className = "wallet-option";
 
-          if (entry.info.icon) {
+          // EIP-6963 specifies a data URI here. Anything else would be an
+          // extension pointing the page at a remote host, leaking one request
+          // per installed wallet — show the initial instead of fetching it.
+          if (typeof entry.info.icon === "string" && entry.info.icon.startsWith("data:image/")) {
             const img = document.createElement("img");
             img.src = entry.info.icon;
             img.alt = "";
@@ -1974,7 +2017,7 @@
         state.provider = null;
         state.walletName = null;
         render();
-        showToast(error?.code === 4001 ? "Connection rejected." : (error?.message || "Could not connect."), true);
+        showToast(walletError(error, "Could not connect."), true);
       }
     }
 
@@ -2073,7 +2116,7 @@
         // New tokens need to show up in the reveal picker once the tx lands.
         window.setTimeout(loadOwnedTokens, 4000);
       } catch (error) {
-        showToast(error?.message || "Mint transaction rejected.", true);
+        showToast(walletError(error, "Mint transaction rejected."), true);
       } finally {
         state.pending = null;
         render();
