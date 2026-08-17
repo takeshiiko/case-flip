@@ -12,9 +12,3 @@ cache/
 generated/
 reveal-data*.json
 *.private.json
-
-# Bulk minting tool and its seed. The repo is public, and publishing this
-# would announce that supply is being self-minted — that is a disclosure
-# decision, not a default.
-scripts/bulk-mint.js
-caseflip-minters.json
