@@ -1599,17 +1599,9 @@
       return config.maxSupply >= 1000 ? `${config.maxSupply / 1000}K` : String(config.maxSupply);
     }
 
-    /**
-     * The pool is masked to everything but its last group — "**,000" — so the
-     * scale reads without stating the figure. This is presentation only: the
-     * real number is a public getter on the contract, so treat it as a teaser
-     * rather than as concealment.
-     */
     function formatPool() {
       const whole = Number(config.rewardPool) / 10 ** PRIZE_DECIMALS;
-      const text = whole.toLocaleString("en-US", { maximumFractionDigits: 2 });
-      const masked = text.replace(/[\d.]+(?=,[^,]*$)/, run => "*".repeat(run.length));
-      return `${masked} ${config.rewardSymbol}`;
+      return `${whole.toLocaleString("en-US", { maximumFractionDigits: 2 })} ${config.rewardSymbol}`;
     }
 
     function strip0x(hex) {
